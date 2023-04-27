@@ -309,7 +309,7 @@ vmessConfig() {
 			"listen_port": $PORT,
 			"users": [{
 				"uuid": "$UUID",
-				"alterId": 0,
+				"alterId": 0
 			}],
 			"tcp_fast_open": true,
 			"udp_fragment": true,
