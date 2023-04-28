@@ -314,7 +314,7 @@ vmessConfig() {
 			"tcp_fast_open": true,
 			"udp_fragment": true,
 			"sniff": true,
-			"proxy_protocol": true
+			"proxy_protocol": false
 		}
 	],
 	"outbounds": [{
@@ -340,7 +340,7 @@ vlessConfig() {
 			"tcp_fast_open": true,
 			"udp_fragment": true,
 			"sniff": true,
-			"proxy_protocol": true
+			"proxy_protocol": false
 		}
 	],
 	"outbounds": [{
@@ -359,13 +359,14 @@ trojanConfig() {
 			"type": "trojan",
 			"listen": "0.0.0.0",
 			"listen_port": $PORT,
+			"domain_strategy": "prefer_ipv4",
 			"users": [{
 				"password": "$PASSWORD"
 			}],
 			"tcp_fast_open": true,
 			"udp_fragment": true,
 			"sniff": true,
-			"proxy_protocol": true,
+			"proxy_protocol": false,
 			"tls": {
 			"enabled": true,
 			"server_name": "$DOMAIN",
@@ -421,7 +422,7 @@ socksConfig() {
 			"tcp_fast_open": true,
 			"udp_fragment": true,
 			"sniff": true,
-			"proxy_protocol": true
+			"proxy_protocol": false
 		}
 	],
 	"outbounds": [{
