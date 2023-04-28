@@ -510,12 +510,12 @@ uninstall() {
 	read -p " 确定卸载SingBox？[y/n]：" answer
 	if [[ "${answer,,}" = "y" ]]; then
 	stop
-	systemctl disable xray
+	systemctl disable sing-box
 	rm -rf /etc/systemd/system/sing-box.service
 	systemctl daemon-reload
 	rm -rf /usr/local/bin/sing-box
 	rm -rf /usr/local/etc/sing-box
-	colorEcho $GREEN " Xray卸载成功"
+	colorEcho $GREEN " SingBox卸载成功"
 	fi
 }
 
