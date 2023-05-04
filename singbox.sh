@@ -707,7 +707,7 @@ menu() {
 	echo -e "# ${GREEN}TG号${PLAIN}: https://t.me/slotheve                                   #"
 	echo "#################################################################"
 	echo " -----------------------------------------"
-	colorEcho $YELLOW "  全协议支持UDP over TCP , 且ss/socks支持原生UDP"
+	colorEcho $GREEN "  全协议支持UDP over TCP , 且ss/socks支持原生UDP"
 	echo -e "  ${GREEN}1.${PLAIN}  安装vmess"
 	echo -e "  ${GREEN}2.${PLAIN}  安装vless"
 	echo -e "  ${GREEN}3.${PLAIN}  安装Trojan"
