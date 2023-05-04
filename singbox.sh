@@ -708,6 +708,7 @@ menu() {
 	echo "#################################################################"
 	echo " -----------------------------------------"
 	colorEcho $GREEN "  全协议支持UDP over TCP , 且ss/socks支持原生UDP"
+        echo "-----------------------------------------"
 	echo -e "  ${GREEN}1.${PLAIN}  安装vmess"
 	echo -e "  ${GREEN}2.${PLAIN}  安装vless"
 	echo -e "  ${GREEN}3.${PLAIN}  安装Trojan"
