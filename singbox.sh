@@ -3,15 +3,16 @@
 # Author: Slotheve<https://slotheve.com>
 
 
-RED="\033[31m"      # Error message
-GREEN="\033[32m"    # Success message
-YELLOW="\033[33m"   # Warning message
-BLUE="\033[36m"     # Info message
+RED="\033[31m"
+GREEN="\033[32m"
+YELLOW="\033[33m"
+BLUE="\033[36m"
 PLAIN='\033[0m'
-
 
 CONFIG_FILE="/usr/local/etc/sing-box/config.json"
 OS=`hostnamectl | grep -i system | cut -d: -f2`
+stls_conf="/etc/systemd/system/shadowtls.service"
+STLS="false"
 
 IP=`curl -sL -4 ip.sb`
 VMESS="false"
@@ -26,6 +27,13 @@ aes-256-gcm
 chacha20-ietf-poly1305
 2022-blake3-chacha20-poly1305
 none
+)
+
+domains=(
+gateway.icloud.com
+cn.bing.com
+mp.weixin.qq.com
+自定义
 )
 
 checkSystem() {
@@ -94,6 +102,14 @@ status() {
     if [[ `config` != "yes" ]]; then
         echo 3
     fi
+}
+
+Check_singbox() {
+    ress=`status`
+	if [[ "${ress}" = "0" || "${ress}" = "1" ]]; then
+	    colorEcho $RED "未安装Singbox, 请先安装Singbox"
+		exit 1
+	fi
 }
 
 statusText() {
@@ -244,9 +260,11 @@ archAffix() {
     case "$(uname -m)" in
         x86_64|amd64)
             ARCH="amd64"
+			CPU="x86_64"
         ;;
         armv8|aarch64)
             ARCH="arm64"
+			CPU="aarch64"
         ;;
         *)
             colorEcho $RED " 不支持的CPU架构！"
@@ -299,6 +317,126 @@ EOF
 	chmod 644 ${CONFIG_FILE}
 	systemctl daemon-reload
 	systemctl enable sing-box.service
+}
+
+Download_stls() {
+	rm -rf /usr/local/etc/sing-box/shadowtls
+	archAffix
+	TAG_URL="https://api.github.com/repos/ihciah/shadow-tls/releases/latest"
+	DOWN_VER=`curl -s "${TAG_URL}" --connect-timeout 10| grep -Eo '\"tag_name\"(.*?)\",' | cut -d\" -f4`
+	DOWNLOAD_LINK="https://github.com/ihciah/shadow-tls/releases/download/${DOWN_VER}/shadow-tls-${CPU}-unknown-linux-musl"
+	colorEcho $YELLOW "下载ShadowTLS: ${DOWNLOAD_LINK}"
+	curl -L -H "Cache-Control: no-cache" -o /usr/local/etc/sing-box/shadowtls ${DOWNLOAD_LINK}
+	chmod +x /usr/local/etc/sing-box/shadowtls
+}
+
+Generate_stls() {
+	Set_sport
+	Set_domain
+	Set_pass
+}
+
+Deploy_stls() {
+	cd /etc/systemd/system
+	cat > shadowtls.service<<-EOF
+[Unit]
+Description=Shadow-TLS Server Service
+Documentation=man:sstls-server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/etc/sing-box/shadowtls --fastopen --v3 server --listen 0.0.0.0:$SPORT --server 127.0.0.1:$PORT --tls $DOMAIN --password $PASS
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=shadow-tls
+
+[Install]
+WantedBy=multi-user.target
+EOF
+	systemctl daemon-reload
+	systemctl enable shadowtls
+	systemctl restart shadowtls
+	colorEcho $BLUE "ShadowTLS安装完成"
+}
+
+Set_sport() {
+	read -p $'请输入协议端口 [1-65535]:' PORT
+	echo $((${PORT}+0)) &>/dev/null
+	if [[ $? -eq 0 ]]; then
+		if [[ ${PORT} -ge 1 ]] && [[ ${PORT} -le 65535 ]]; then
+			colorEcho $BLUE "协议端口: ${PORT}"
+			echo ""
+		else
+			colorEcho $RED "输入错误, 请输入正确的端口。"
+			echo ""
+			exit 1
+		fi
+	else
+		colorEcho $RED "输入错误, 请输入数字。"
+		echo ""
+		exit 1
+	fi
+	read -p $'请输入 ShadowTLS 端口 [1-65535]\n(默认: 9999，回车):' SPORT
+	[[ -z "${SPORT}" ]] && SPORT="9999"
+	echo $((${SPORT}+0)) &>/dev/null
+	if [[ $? -eq 0 ]]; then
+		if [[ ${SPORT} -ge 1 ]] && [[ ${SPORT} -le 65535 ]]; then
+			colorEcho $BLUE "端口: ${SPORT}"
+			echo ""
+		else
+			colorEcho $RED "输入错误, 请输入正确的端口。"
+			echo ""
+			exit 1
+		fi
+	else
+		colorEcho $RED "输入错误, 请输入数字。"
+		echo ""
+		exit 1
+	fi
+}
+
+Set_domain() {
+	 for ((i=1;i<=${#domains[@]};i++ )); do
+ 		hint="${domains[$i-1]}"
+ 		echo -e "${GREEN}${i}${PLAIN}) ${hint}"
+ 	done
+	read -p "请选择域名[1-4] (默认: ${domains[0]}):" pick
+	[ -z "$pick" ] && pick=1
+	expr ${pick} + 1 &>/dev/null
+	if [ $? -ne 0 ]; then
+		colorEcho $RED "错误, 请输入正确选项"
+		continue
+	fi
+	if [[ "$pick" -lt 1 || "$pick" -gt ${#domains[@]} ]]; then
+		echo -e "${red}错误, 请输入正确选项${plain}"
+		exit 0
+	fi
+	DOMAIN=${domains[$pick-1]}
+	if [[ "$pick" = "4" ]]; then
+		colorEcho $BLUE "已选择: ${domains[$pick-1]}"
+		echo ""
+		read -p $'请输入自定义域名: ' DOMAIN
+		if [[ -z "${DOMAIN}" ]]; then
+			colorEcho $RED "错误, 请输入正确的域名"
+			echo ""
+			exit 1
+		else
+			colorEcho $BLUE "域名：$DOMAIN"
+			echo ""
+		fi
+	else
+		colorEcho $BLUE "域名：${domains[$pick-1]}"
+		echo ""
+	fi
+}
+
+Set_pass() {
+	read -p $'请设置ShadowTLS的密码\n(默认随机生成, 回车):' PASS
+	[[ -z "$PASS" ]] && PASS=`cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1`
+	colorEcho $BLUE " 密码：$PASS"
+	echo ""
 }
 
 vmessConfig() {
@@ -455,7 +593,6 @@ install() {
 
 	$PMT clean all
 	[[ "$PMT" = "apt" ]] && $PMT update
-	#echo $CMD_UPGRADE | bash
 	$CMD_INSTALL wget vim tar openssl
 	$CMD_INSTALL net-tools
 	if [[ "$PMT" = "apt" ]]; then
@@ -477,6 +614,16 @@ install() {
 		setSelinux
 		start
 		showInfo
+}
+
+Install_stls() {
+	Check_singbox
+	Generate_stls
+	Download_stls
+	Deploy_stls
+	ShowInfo_stls
+	echo ""
+	echo -e "   ${YELLOW}请将${PLAIN}${RED} 端口 ${PLAIN}${YELLOW}替换为${PLAIN}${RED} ${sport} ${PLAIN}"
 }
 
 update() {
@@ -511,13 +658,47 @@ uninstall() {
 	echo ""
 	read -p " 确定卸载SingBox？[y/n]：" answer
 	if [[ "${answer,,}" = "y" ]]; then
-	stop
-	systemctl disable sing-box
-	rm -rf /etc/systemd/system/sing-box.service
-	systemctl daemon-reload
-	rm -rf /usr/local/bin/sing-box
-	rm -rf /usr/local/etc/sing-box
-	colorEcho $GREEN " SingBox卸载成功"
+	    if [[ -f "$stls_conf" ]]; then
+			stop
+			systemctl disable sing-box
+			systemctl stop shadowtls
+			systemctl disable shadowtls
+			rm -rf /etc/systemd/system/sing-box.service
+			rm -rf /etc/systemd/system/shadowtls.service
+			systemctl daemon-reload
+			rm -rf /usr/local/bin/sing-box
+			rm -rf /usr/local/etc/sing-box
+			colorEcho $GREEN " SingBox卸载成功"
+		else
+			stop
+			systemctl disable sing-box
+			rm -rf /etc/systemd/system/sing-box.service
+			systemctl daemon-reload
+			rm -rf /usr/local/bin/sing-box
+			rm -rf /usr/local/etc/sing-box
+			colorEcho $GREEN " SingBox卸载成功"
+		fi
+	elif [[ "${answer}" = "n" || -z "${answer}" ]]; then
+		colorEcho $BLUE " 取消卸载"
+	else
+		colorEcho $RED " 输入错误, 请输入正确操作。"
+		exit 1
+	fi
+}
+
+Uninstall_stls() {
+	read -p $' 是否卸载ShadowTLS？[y/n]：\n (默认n, 回车)' answer
+	if [[ "${answer}" = "y" ]]; then
+		systemctl stop shadowtls
+		systemctl disable shadowtls
+		rm -rf /etc/systemd/system/shadowtls.service
+		systemctl daemon-reload
+		colorEcho $BLUE " ShadowTLS已经卸载完毕"
+	elif [[ "${answer}" = "n" || -z "${answer}" ]]; then
+		colorEcho $BLUE " 取消卸载"
+	else
+		colorEcho $RED " 输入错误, 请输入正确操作。"
+		exit 1
 	fi
 }
 
@@ -690,6 +871,26 @@ showInfo() {
 	fi
 }
 
+ShowInfo_stls() {
+	echo ""
+	colorEcho $BLUE " ShadowTLS配置信息："
+	GetConfig_stls
+	outputSTLS
+}
+
+GetConfig_stls() {
+	sport=`grep listen ${stls_conf} | cut -d- -f8 | cut -d: -f2`
+	pass=`grep password ${stls_conf} | cut -d " " -f12`
+	domain=`grep password ${stls_conf} | cut -d- -f12 | cut -d " " -f 2`
+}
+
+outputSTLS() {
+	echo -e "   ${BLUE}端口(PORT)：${PLAIN} ${RED}${sport}${PLAIN}"
+	echo -e "   ${BLUE}密码(PASS)：${PLAIN} ${RED}${pass}${PLAIN}"
+	echo -e "   ${BLUE}域名(DOMAIN)：${PLAIN} ${RED}${domain}${PLAIN}"
+	echo -e "   ${BLUE}版本(VER)：${PLAIN} ${RED}v3${PLAIN}"
+}
+
 showLog() {
 	res=`status`
 	if [[ $res -lt 2 ]]; then
@@ -710,7 +911,7 @@ menu() {
 	echo "####################################################"
 	echo " -----------------------------------------------"
 	colorEcho $GREEN "  全协议支持UDP over TCP , 且ss/socks支持原生UDP"
-        echo " -----------------------------------------------"
+    echo " -----------------------------------------------"
 	echo -e "  ${GREEN}1.${PLAIN}  安装vmess"
 	echo -e "  ${GREEN}2.${PLAIN}  安装vless"
 	echo -e "  ${GREEN}3.${PLAIN}  安装Trojan"
@@ -718,15 +919,19 @@ menu() {
 	echo -e "  ${GREEN}5.${PLAIN}  安装Socks ${RED}不推荐${PLAIN}"
 	echo -e "  ${GREEN}6.${PLAIN}  ${YELLOW}切换Snell脚本${PLAIN}"
 	echo " --------------------"
-	echo -e "  ${GREEN}7.${PLAIN}  更新SingBox"
-	echo -e "  ${GREEN}8.${PLAIN}  ${RED}卸载SingBox${PLAIN}"
+	echo -e "  ${GREEN}7.${PLAIN}  安装ShadowTls"
+	echo -e "  ${GREEN}8.${PLAIN}  ${RED}卸载ShadowTls${PLAIN}"
 	echo " --------------------"
-	echo -e "  ${GREEN}9.${PLAIN}  启动SingBox"
-	echo -e "  ${GREEN}10.${PLAIN} 重启SingBox"
-	echo -e "  ${GREEN}11.${PLAIN} 停止SingBox"
+	echo -e "  ${GREEN}9.${PLAIN}  更新SingBox"
+	echo -e "  ${GREEN}10.${PLAIN} ${RED}卸载SingBox${PLAIN}"
 	echo " --------------------"
-	echo -e "  ${GREEN}12.${PLAIN} 查看SingBox配置"
-	echo -e "  ${GREEN}13.${PLAIN} 查看SingBox日志"
+	echo -e "  ${GREEN}11.${PLAIN} 启动SingBox"
+	echo -e "  ${GREEN}12.${PLAIN} 重启SingBox"
+	echo -e "  ${GREEN}13.${PLAIN} 停止SingBox"
+	echo " --------------------"
+	echo -e "  ${GREEN}14.${PLAIN} 查看SingBox配置"
+	echo -e "  ${GREEN}15.${PLAIN} 查看ShadowTls配置"
+	echo -e "  ${GREEN}16.${PLAIN} 查看SingBox日志"
 	echo " --------------------"
 	echo -e "  ${GREEN}0.${PLAIN}  退出"
 	echo ""
@@ -734,7 +939,7 @@ menu() {
 	statusText
 	echo 
 
-	read -p " 请选择操作[0-8]：" answer
+	read -p " 请选择操作[0-16]：" answer
 	case $answer in
 		0)
 			exit 0
@@ -763,24 +968,33 @@ menu() {
 			bash <(curl -fsSL https://raw.githubusercontent.com/Slotheve/Snell/main/snell.sh)
 			;;
 		7)
-			update
+			Install_stls
 			;;
 		8)
-			uninstall
+			Uninstall_stls
 			;;
 		9)
-			start
+			update
 			;;
 		10)
-			restart
+			uninstall
 			;;
 		11)
-			stop
+			start
 			;;
 		12)
-			showInfo
+			restart
 			;;
 		13)
+			stop
+			;;
+		14)
+			showInfo
+			;;
+		15)
+			ShowInfo_stls
+			;;
+		16)
 			showLog
 			;;
 		*)
