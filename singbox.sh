@@ -451,9 +451,10 @@ vmessConfig() {
 				"uuid": "$UUID",
 				"alterId": 0
 			}],
-			"tcp_fast_open": true,
-			"udp_fragment": true,
-			"sniff": true,
+   			"tcp_fast_open": true,
+    		        "udp_fragment": true,
+   			"sniff": true,
+    			"sniff_override_destination": true,
 			"proxy_protocol": false
 		}
 	],
@@ -478,8 +479,9 @@ vlessConfig() {
 				"flow": ""
 			}],
 			"tcp_fast_open": true,
-			"udp_fragment": true,
-			"sniff": true,
+	 		"udp_fragment": true,
+            		"sniff": true,
+            		"sniff_override_destination": true,
 			"proxy_protocol": false
 		}
 	],
